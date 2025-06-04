@@ -11,6 +11,7 @@ from rdflib import Graph, URIRef, IdentifiedNode, SH, RDF, RDFS
 from rdfnav import GraphNavigator, UriNode
 
 def raise_exceptions(results_graph: Graph):
+    "Raises an exception for each validation failure in the SHACL validation report"
     # Start navigating a graph
     nav = GraphNavigator(results_graph)
 
@@ -23,9 +24,7 @@ def raise_exceptions(results_graph: Graph):
     # Follow all sh:result properties to find validation result nodes
     for result in validation_report.ref_objs(SH.result):
         # Follow one single sh:resultMessage property to find the string message for this result
-        yield ValidationError(
-            message=result.lit_obj(SH.resultMessage)
-        )
+        raise Exception(result.lit_obj(SH.resultMessage))
 
 ```
 
