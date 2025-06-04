@@ -28,3 +28,5 @@ def raise_exceptions(results_graph: Graph):
         )
 
 ```
+
+[More detailed API docs can be found here](docs/api.md).
