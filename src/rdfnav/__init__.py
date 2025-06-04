@@ -1,20 +1,31 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
-from rdflib import Graph, Node, URIRef, Literal
+from rdflib import Graph, Node, URIRef, Literal, IdentifiedNode
 
 @dataclass
 class GraphNavigator:
+    """
+    Wraps an RDF graph and provides methods to navigate through it using URIs.
+    """
     graph: Graph
 
-    def __getitem__(self, uri: URIRef) -> UriNode:
+    def __getitem__(self, uri: IdentifiedNode) -> UriNode:
+        "Traverses to a given node"
         return UriNode(self.graph, uri)
 
     def subjects(self, predicate: URIRef, object: URIRef) -> Iterable[UriNode]:
+        """
+        Yields navigator objects for all nodes that are subjects of the given predicate and object
+        """
         for subj in self.graph.subjects(predicate, object):
             yield UriNode(self.graph, subj)
     
     def subject(self, predicate: URIRef, object: URIRef) -> UriNode:
+        """
+        Yields a single navigator object for the subject of the given predicate and object.
+        Raises an error if there are is not exactly one such subject.
+        """
         subjects = list(self.subjects(predicate, object))
         if len(subjects) == 0:
             raise ValueError(f"Subject not found for {predicate} {object}")
@@ -24,19 +35,24 @@ class GraphNavigator:
 
 @dataclass
 class UriNode:
+    """
+    Navigation helper for a single node in the RDF graph, identified by a URI.
+    Typically this is created by the `GraphNavigator` class.
+    """
     graph: Graph
     iri: Node
 
     @property
     def suffix(self) -> str:
+        "Returns the suffix of the URI, which is the last part after the last slash or hash."
         return self.graph.namespace_manager.compute_qname(str(self.iri))[2]
 
     def ref_objs(self, predicate: URIRef) -> Iterable[UriNode]:
         """
-        Yields all URIs that can be reached from the current object using `predicate`, as `UriNode` instances.
+        Yields navigator objects for all nodes that can be reached from the current object using `predicate`.
         """
         for obj in self.graph.objects(subject=self.iri, predicate=predicate):
-            if not isinstance(obj, URIRef):
+            if not isinstance(obj, IdentifiedNode):
                 raise ValueError(f"Object is not a URI for {self.iri} {predicate}")
             yield UriNode(self.graph, obj)
     
@@ -78,7 +94,7 @@ class UriNode:
         Yields all URIs that can reach the current object using `predicate`, as `UriNode` instances.
         """
         for subj in self.graph.subjects(predicate=predicate, object=self.iri):
-            if not isinstance(subj, URIRef):
+            if not isinstance(subj, IdentifiedNode):
                 raise ValueError(f"Subject is not a URI for {subj} {predicate}")
             yield UriNode(self.graph, subj)
     
