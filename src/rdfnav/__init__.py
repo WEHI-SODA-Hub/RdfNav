@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
-from rdflib import Graph, Node, URIRef, Literal, IdentifiedNode
+from rdflib import RDF, Graph, Node, URIRef, Literal, IdentifiedNode
 
 @dataclass
 class GraphNavigator:
@@ -33,6 +33,32 @@ class GraphNavigator:
             raise ValueError(f"Multiple subjects found for {predicate} {object}")
         return subjects[0]
 
+    def instances(self, type_uri: URIRef) -> Iterable[UriNode]:
+        """
+        Yields navigator objects for all instances of the given type URI.
+        """
+        return self.subjects(predicate=RDF.type, object=type_uri)
+    
+    def instance(self, type_uri: URIRef) -> UriNode:
+        """
+        Returns a single navigator object for an instance of the given type URI.
+        """
+        instances = self.instances(type_uri)
+        return exactly_one(instances)
+
+
+def exactly_one[T](items: Iterable[T]) -> T:
+    """
+    Helper function to ensure that exactly one item is returned from an iterable.
+    Raises ValueError if there are no items or more than one item.
+    """
+    items_list = list(items)
+    if len(items_list) == 0:
+        raise ValueError("No items found")
+    elif len(items_list) > 1:
+        raise ValueError("Multiple items found")
+    return items_list[0]
+
 @dataclass
 class UriNode:
     """
@@ -61,12 +87,8 @@ class UriNode:
         Yields one `UriNode` that can be reached from the current object using `predicate`.
         Fails if there are no objects or more than one object.
         """
-        objs = list(self.ref_objs(predicate))
-        if len(objs) == 0:
-            raise ValueError(f"Object not found for {self.iri} {predicate}")
-        elif len(objs) > 1:
-            raise ValueError(f"Multiple objects found for {self.iri} {predicate}")
-        return objs[0]
+        objs = self.ref_objs(predicate)
+        return exactly_one(objs)
 
     def lit_objs(self, predicate: URIRef) -> Iterable[Any]:
         """
@@ -82,12 +104,8 @@ class UriNode:
         Returns one literal that can be reached from the current object using `predicate`.
         Fails if there are no objects or more than one object.
         """
-        objs = list(self.lit_objs(predicate))
-        if len(objs) == 0:
-            raise ValueError(f"Object not found for {self.iri} {predicate}")
-        elif len(objs) > 1:
-            raise ValueError(f"Multiple objects found for {self.iri} {predicate}")
-        return objs[0]
+        objs = self.lit_objs(predicate)
+        return exactly_one(objs)
 
     def ref_subjs(self, predicate: URIRef) -> Iterable[UriNode]:
         """
@@ -95,7 +113,7 @@ class UriNode:
         """
         for subj in self.graph.subjects(predicate=predicate, object=self.iri):
             if not isinstance(subj, IdentifiedNode):
-                raise ValueError(f"Subject is not a URI for {subj} {predicate}")
+                raise ValueError(f"Subject is not a URI or BNode for {subj} {predicate}")
             yield UriNode(self.graph, subj)
     
     def ref_subj(self, predicate: URIRef) -> UriNode:
@@ -103,12 +121,30 @@ class UriNode:
         Yields one `UriNode` that can reach the current object using `predicate`.
         Fails if there are no subjects or more than one subject.
         """
-        subjs = list(self.ref_subjs(predicate))
-        if len(subjs) == 0:
-            raise ValueError(f"Subject not found for {self.iri} {predicate}")
-        elif len(subjs) > 1:
-            raise ValueError(f"Multiple subjects found for {self.iri} {predicate}")
-        return subjs[0]
+        subjs = self.ref_subjs(predicate)
+        return exactly_one(subjs)
+
+    def subgraph(self) -> Graph:
+        """
+        Returns a subgraph containing only the current node and anything traversable from it.
+        """
+        if not isinstance(self.iri, IdentifiedNode):
+            raise ValueError(f"Cannot create subgraph for non-URI node {self.iri}")
+
+        result = self.graph.query("""
+            CONSTRUCT {
+                ?s ?p ?o .
+            }
+            WHERE {
+                # Find any subject that can be reached from the root node via any number of any predicate
+                ?root !<>* ?s .
+                # Then return all triples whose subject is that node
+                ?s ?p ?o . 
+            }
+        """, initBindings={'root': self.iri})
+        if result.graph is None:
+            raise ValueError("Subgraph query did not return a Graph")
+        return result.graph
 
     # def navigate(self, predicate: URIRef) -> 'Subject':
     #     obj = self.graph.value(subject=self.uri, predicate=predicate)
