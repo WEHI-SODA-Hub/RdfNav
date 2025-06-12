@@ -73,14 +73,17 @@ class UriNode:
         "Returns the suffix of the URI, which is the last part after the last slash or hash."
         return self.graph.namespace_manager.compute_qname(str(self.iri))[2]
 
-    def ref_objs(self, predicate: URIRef) -> Iterable[UriNode]:
+    def ref_objs(self, predicate: URIRef | None = None) -> Iterable[UriNode]:
         """
         Yields navigator objects for all nodes that can be reached from the current object using `predicate`.
+
+        Params:
+            predicate: Optionally, a specific predicate to follow to find subjects.
+                If None, all objects that are URIs or BNodes that can be reached from the current object will be returned.
         """
         for obj in self.graph.objects(subject=self.iri, predicate=predicate):
-            if not isinstance(obj, IdentifiedNode):
-                raise ValueError(f"Object is not a URI for {self.iri} {predicate}")
-            yield UriNode(self.graph, obj)
+            if isinstance(obj, IdentifiedNode):
+                yield UriNode(self.graph, obj)
     
     def ref_obj(self, predicate: URIRef) -> UriNode:
         """
@@ -90,14 +93,26 @@ class UriNode:
         objs = self.ref_objs(predicate)
         return exactly_one(objs)
 
-    def lit_objs(self, predicate: URIRef) -> Iterable[Any]:
+    def ref_obj_dict(self) -> dict[URIRef, UriNode]:
+        """
+        Returns a dictionary of all URIs that can be reached from the current object,
+        where the keys are the predicates and the values are `UriNode` instances.
+        Only predicates that are URIs are included.
+        """
+        return {
+            pred: UriNode(self.graph, obj)
+            for pred, obj in self.graph.predicate_objects(subject=self.iri)
+            if isinstance(obj, IdentifiedNode) and isinstance(pred, URIRef)
+        }
+
+    def lit_objs(self, predicate: URIRef | None) -> Iterable[Any]:
         """
         Yields all literals that can be reached from the current object using `predicate`.
+        If `predicate` is None, all literals that can be reached using one predicate from the current object will be returned.
         """
         for obj in self.graph.objects(subject=self.iri, predicate=predicate):
-            if not isinstance(obj, Literal):
-                raise ValueError(f"Object is not a Literal for {self.iri} {predicate}")
-            yield obj.value
+            if isinstance(obj, Literal):
+                yield obj.value
     
     def lit_obj(self, predicate: URIRef) -> Any:
         """
@@ -107,15 +122,30 @@ class UriNode:
         objs = self.lit_objs(predicate)
         return exactly_one(objs)
 
+    def lit_obj_dict(self) -> dict[URIRef, Any]:
+        """
+        Returns a dictionary of all literals that can be reached from the current object,
+        where the keys are the predicates and the values are the literal values.
+        Only predicates that are URIs are included.
+        """
+        return {
+            pred: obj.value
+            for pred, obj in self.graph.predicate_objects(subject=self.iri)
+            if isinstance(obj, Literal) and isinstance(pred, URIRef)
+        }
+    
     def ref_subjs(self, predicate: URIRef) -> Iterable[UriNode]:
         """
         Yields all URIs that can reach the current object using `predicate`, as `UriNode` instances.
+
+        Params:
+            predicate: Optionally, a specific predicate to follow to find subjects.
+                If None, all subjects of the current object will be returned.
         """
         for subj in self.graph.subjects(predicate=predicate, object=self.iri):
-            if not isinstance(subj, IdentifiedNode):
-                raise ValueError(f"Subject is not a URI or BNode for {subj} {predicate}")
-            yield UriNode(self.graph, subj)
-    
+            if isinstance(subj, IdentifiedNode):
+                yield UriNode(self.graph, subj)
+
     def ref_subj(self, predicate: URIRef) -> UriNode:
         """
         Yields one `UriNode` that can reach the current object using `predicate`.
