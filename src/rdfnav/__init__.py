@@ -93,6 +93,26 @@ class UriNode:
         for pred, obj in self.graph.predicate_objects(subject=self.iri):
             if isinstance(obj, IdentifiedNode) and isinstance(pred, URIRef):
                 yield pred, UriNode(self.graph, obj)
+
+    def ref_objs_prefix(self, *prefixes: str) -> Iterable[tuple[URIRef, UriNode]]:
+        """
+        Yields tuples of (predicate, `UriNode`) for objects that can be reached from the current object using predicates that start with `prefix`.
+        """
+        for pred, obj in self.ref_objs():
+            for prefix in prefixes:
+                if str(pred).startswith(prefix):
+                    yield pred, obj
+                    break
+
+    def ref_objs_sans_prefix(self, *prefixes: str) -> Iterable[tuple[str, UriNode]]:
+        """
+        Yields tuples of (predicate without prefix, `UriNode`) for all objects that can be reached from the current object,
+        """
+        for pred, obj in self.ref_objs():
+            for prefix in prefixes:
+                if str(pred).startswith(prefix):
+                    yield pred.removeprefix(prefix), obj
+                    break
     
     def ref_obj_via(self, predicate: URIRef) -> UriNode:
         """
@@ -125,6 +145,26 @@ class UriNode:
         """
         objs = self.lit_objs_via(predicate)
         return exactly_one(objs)
+
+    def lit_objs_prefix(self, *prefixes: str) -> Iterable[tuple[URIRef, Any]]:
+        """
+        Yields tuples of (predicate, literal) for objects that can be reached from the current object using predicates that start with `prefix`.
+        """
+        for pred, obj in self.lit_objs():
+            for prefix in prefixes:
+                if str(pred).startswith(prefix):
+                    yield pred, obj
+                    break
+
+    def lit_objs_sans_prefix(self, *prefixes: str) -> Iterable[tuple[str, Any]]:
+        """
+        Yields tuples of (predicate without prefix, literal) for all objects that can be reached from the current object.
+        """
+        for pred, obj in self.lit_objs():
+            for prefix in prefixes:
+                if str(pred).startswith(prefix):
+                    yield pred.removeprefix(prefix), obj
+                    break
 
     def ref_subjs_via(self, predicate: URIRef) -> Iterable[UriNode]:
         """
