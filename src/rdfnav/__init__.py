@@ -1,7 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Self, cast
 from rdflib import RDF, Graph, Node, URIRef, Literal, IdentifiedNode
+from rdflib.graph import _TripleType, _PredicateType, _ObjectType
 
 @dataclass
 class GraphNavigator:
@@ -216,20 +217,48 @@ class UriNode:
             raise ValueError("Subgraph query did not return a Graph")
         return result.graph
 
-    # def navigate(self, predicate: URIRef) -> 'Subject':
-    #     obj = self.graph.value(subject=self.uri, predicate=predicate)
-    #     if obj is None:
-    #         raise ValueError(f"Object not found for {self.uri} {predicate}")
-    #     if not isinstance(obj, URIRef):
-    #         raise ValueError(f"Object is not a URI for {self.uri} {predicate}")
-        
-    #     return Subject(self.graph, obj)
+    def cbd(self) -> Graph:
+        """
+        Returns the Concise Bounded Description (CBD) of the current node
+        """
+        return self.graph.cbd(self.iri)
 
-    # def literal(self, predicate: URIRef) -> Any:
-    #     obj = self.graph.value(subject=self.uri, predicate=predicate)
-    #     if obj is None:
-    #         raise ValueError(f"Object not found for {self.uri} {predicate}")
-    #     if not isinstance(obj, Literal):
-    #         raise ValueError(f"Object is not a Literal for {self.uri} {predicate}")
-        
-    #     return obj.value
+    def change_iri(self, new_iri: URIRef) -> Self:
+        """
+        Changes all instance of the current IRI to a new IRI.
+        This mutates the graph.
+        """
+        for triple in self.graph:
+            if self.iri in triple:
+                # We want the minimal mutations to the graph, so rather than creating a new one we remove only the triple that contains the old IRI
+                self.graph.remove(triple)
+                # Type is fine, as we're guaranteed to only ever add UriRefs
+                self.graph.add(cast(_TripleType, tuple(new_iri if x == self.iri else x for x in triple)))
+
+        return self
+
+    def delete(self, pred: _PredicateType, obj: _ObjectType | None = None) -> Self:
+        """
+        Deletes all triples that have the current IRI as subject and the given predicate and optionally object.
+        This mutates the graph.
+        """
+        for trip in self.graph.triples((self.iri, pred, obj)):
+            self.graph.remove(trip)
+        return self
+
+    def add(self, predicate: _PredicateType, obj: _ObjectType) -> Self:
+        """
+        Adds a new triple with the current IRI as subject, the given predicate and object.
+        This mutates the graph.
+        """
+        self.graph.add((self.iri, predicate, obj))
+        return self
+
+    def replace(self, predicate: _PredicateType, obj: _ObjectType) -> Self:
+        """
+        Replaces all triples with the current IRI as subject and the given predicate with a new object.
+        This mutates the graph.
+        """
+        self.delete(predicate)
+        self.add(predicate, obj)
+        return self
