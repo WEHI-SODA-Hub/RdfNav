@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Self, cast
-from rdflib import RDF, Graph, Node, URIRef, Literal, IdentifiedNode
+from rdflib import RDF, Graph, URIRef, Literal, IdentifiedNode
 from rdflib.graph import _TripleType, _PredicateType, _ObjectType
 from rdflib.query import ResultRow
 
@@ -23,7 +23,12 @@ class GraphNavigator:
         Yields navigator objects for all nodes that are subjects of the given predicate and object
         """
         for subj in self.graph.subjects(predicate, object):
-            yield UriNode(self, subj)
+            if isinstance(subj, IdentifiedNode):
+                yield UriNode(self, subj)
+            else:
+                raise ValueError(
+                    f"{subj} is being used as a subject, but isn't a URI or BNode, which doesn't follow the RDF spec."
+                )
 
     def subject(self, predicate: URIRef, object: URIRef) -> UriNode:
         """
@@ -121,7 +126,7 @@ class UriNode:
     """
 
     navigator: GraphNavigator
-    iri: Node
+    iri: IdentifiedNode
 
     @property
     def graph(self) -> Graph:
@@ -258,9 +263,6 @@ class UriNode:
         """
         Returns a subgraph containing only the current node and anything traversable from it.
         """
-        if not isinstance(self.iri, IdentifiedNode):
-            raise ValueError(f"Cannot create subgraph for non-URI node {self.iri}")
-
         result = self.graph.query(
             """
             CONSTRUCT {
