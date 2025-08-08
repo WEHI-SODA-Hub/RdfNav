@@ -1,11 +1,13 @@
-from rdflib import Graph, URIRef, SDO
+from rdflib import Graph, URIRef, SDO, RDF
 import pytest
 from rdfnav import GraphNavigator
+
 
 @pytest.fixture
 def graph_nav() -> GraphNavigator:
     test_graph = Graph()
-    test_graph.parse(data="""
+    test_graph.parse(
+        data="""
     @prefix schema: <https://schema.org/> .
     @prefix ex: <http://example.org/> .
     
@@ -66,8 +68,10 @@ def graph_nav() -> GraphNavigator:
     ex:CompanyLogo a schema:ImageObject .
     
     ex:TeamLead a schema:OrganizationRole .
-    """)
+    """
+    )
     return GraphNavigator(test_graph)
+
 
 def test_subgraph(graph_nav: GraphNavigator):
     review = graph_nav.instance(SDO.Review)
@@ -81,68 +85,99 @@ def test_subgraph(graph_nav: GraphNavigator):
         URIRef("http://example.org/Reviewer"),
     }
 
-    objects = set(triple[2] for triple in triples)  
+    objects = set(triple[2] for triple in triples)
     assert objects == {
         URIRef("http://example.org/Rating"),
         URIRef("http://example.org/Reviewer"),
         SDO.Review,
         SDO.Rating,
-        SDO.Person
+        SDO.Person,
     }
 
+
 def test_graphnavigator_subjects(graph_nav: GraphNavigator):
-    subjects = list(graph_nav.subjects(URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation")))
-    assert any(node.iri == URIRef("http://example.org/TechCompany") for node in subjects)
+    subjects = list(
+        graph_nav.subjects(
+            URIRef("https://schema.org/location"),
+            URIRef("http://example.org/HeadquartersLocation"),
+        )
+    )
+    assert any(
+        node.iri == URIRef("http://example.org/TechCompany") for node in subjects
+    )
+
 
 def test_graphnavigator_subject(graph_nav: GraphNavigator):
-    subject = graph_nav.subject(URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation"))
+    subject = graph_nav.subject(
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    )
     assert subject.iri == URIRef("http://example.org/TechCompany")
+
 
 def test_graphnavigator_instances(graph_nav: GraphNavigator):
     instances = list(graph_nav.instances(URIRef("https://schema.org/Organization")))
     assert URIRef("http://example.org/TechCompany") in [node.iri for node in instances]
 
+
 def test_graphnavigator_instance(graph_nav: GraphNavigator):
     instance = graph_nav.instance(URIRef("https://schema.org/Offer"))
     assert instance.iri == URIRef("http://example.org/ProductOffer1")
+
 
 def test_urinode_suffix(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     assert node.suffix == "TechCompany"
 
+
 def test_urinode_ref_objs_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     objs = list(node.ref_objs_via(URIRef("https://schema.org/location")))
-    assert any(obj.iri == URIRef("http://example.org/HeadquartersLocation") for obj in objs)
+    assert any(
+        obj.iri == URIRef("http://example.org/HeadquartersLocation") for obj in objs
+    )
+
 
 def test_urinode_ref_objs(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     pairs = list(node.ref_objs())
-    assert any(obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs)
+    assert any(
+        obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs
+    )
+
 
 def test_urinode_ref_objs_prefix(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     pairs = list(node.ref_objs_prefix("https://schema.org/"))
-    assert any(obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs)
+    assert any(
+        obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs
+    )
+
 
 def test_urinode_ref_objs_sans_prefix(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     pairs = list(node.ref_objs_sans_prefix("https://schema.org/"))
-    assert any(obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs)
+    assert any(
+        obj.iri == URIRef("http://example.org/HeadquartersLocation") for _, obj in pairs
+    )
+
 
 def test_urinode_ref_obj_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     obj = node.ref_obj_via(URIRef("https://schema.org/location"))
     assert obj.iri == URIRef("http://example.org/HeadquartersLocation")
 
+
 def test_urinode_lit_objs_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     # No literals in fixture, just check it runs
     assert list(node.lit_objs_via(URIRef("https://schema.org/location"))) == []
 
+
 def test_urinode_lit_objs(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     assert list(node.lit_objs()) == []
+
 
 def test_urinode_lit_obj_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
@@ -153,53 +188,196 @@ def test_urinode_lit_obj_via(graph_nav: GraphNavigator):
     else:
         assert False, "Should raise ValueError for no literal"
 
+
 def test_urinode_lit_objs_prefix(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     assert list(node.lit_objs_prefix("https://schema.org/")) == []
 
+
 def test_urinode_lit_objs_sans_prefix(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     assert list(node.lit_objs_sans_prefix("https://schema.org/")) == []
+
 
 def test_urinode_ref_subjs_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/HeadquartersLocation")]
     subjs = list(node.ref_subjs_via(URIRef("https://schema.org/location")))
     assert any(subj.iri == URIRef("http://example.org/TechCompany") for subj in subjs)
 
+
 def test_urinode_ref_subjs(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/HeadquartersLocation")]
     subjs = list(node.ref_subjs())
     assert any(subj.iri == URIRef("http://example.org/TechCompany") for subj in subjs)
+
 
 def test_urinode_ref_subj_via(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/HeadquartersLocation")]
     subj = node.ref_subj_via(URIRef("https://schema.org/location"))
     assert subj.iri == URIRef("http://example.org/TechCompany")
 
+
 def test_urinode_cbd(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     cbd_graph = node.cbd()
     assert isinstance(cbd_graph, Graph)
 
+
 def test_urinode_change_iri(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
     new_iri = URIRef("http://example.org/NewTechCompany")
     node.change_iri(new_iri)
-    assert (new_iri, URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation")) in graph_nav.graph
-    assert (URIRef("http://example.org/TechCompany"), URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation")) not in graph_nav.graph
+    assert (
+        new_iri,
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    ) in graph_nav.graph
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    ) not in graph_nav.graph
+
 
 def test_urinode_delete(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
-    node.delete(URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation"))
-    assert (URIRef("http://example.org/TechCompany"), URIRef("https://schema.org/location"), URIRef("http://example.org/HeadquartersLocation")) not in graph_nav.graph
+    node.delete(
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    )
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    ) not in graph_nav.graph
+
 
 def test_urinode_add(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
-    node.add(URIRef("https://schema.org/testPredicate"), URIRef("http://example.org/TestObject"))
-    assert (URIRef("http://example.org/TechCompany"), URIRef("https://schema.org/testPredicate"), URIRef("http://example.org/TestObject")) in graph_nav.graph
+    node.add(
+        URIRef("https://schema.org/testPredicate"),
+        URIRef("http://example.org/TestObject"),
+    )
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/testPredicate"),
+        URIRef("http://example.org/TestObject"),
+    ) in graph_nav.graph
+
 
 def test_urinode_replace(graph_nav: GraphNavigator):
     node = graph_nav[URIRef("http://example.org/TechCompany")]
-    node.replace(URIRef("https://schema.org/brand"), URIRef("http://example.org/NewBrand"))
-    assert (URIRef("http://example.org/TechCompany"), URIRef("https://schema.org/brand"), URIRef("http://example.org/NewBrand")) in graph_nav.graph
-    assert (URIRef("http://example.org/TechCompany"), URIRef("https://schema.org/brand"), URIRef("http://example.org/CompanyBrand")) not in graph_nav.graph
+    node.replace(
+        URIRef("https://schema.org/brand"), URIRef("http://example.org/NewBrand")
+    )
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/brand"),
+        URIRef("http://example.org/NewBrand"),
+    ) in graph_nav.graph
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/brand"),
+        URIRef("http://example.org/CompanyBrand"),
+    ) not in graph_nav.graph
+
+
+def test_graphnavigator_ask_query(graph_nav: GraphNavigator):
+    # True: TechCompany is an Organization
+    query = """
+    ASK WHERE { <http://example.org/TechCompany> a <https://schema.org/Organization> }
+    """
+    assert graph_nav.ask_query(query) is True
+    # False: TechCompany is not a Place
+    query_false = """
+    ASK WHERE { <http://example.org/TechCompany> a <https://schema.org/Place> }
+    """
+    assert graph_nav.ask_query(query_false) is False
+
+
+def test_graphnavigator_select_query(graph_nav: GraphNavigator):
+    query = """
+    SELECT ?s WHERE { ?s a <https://schema.org/Organization> }
+    """
+    uris = [row[0] for row in graph_nav.select_query(query)]
+    assert URIRef("http://example.org/TechCompany") in uris
+    assert URIRef("http://example.org/RnDDepartment") in uris
+    assert URIRef("http://example.org/AITeam") in uris
+
+
+def test_graphnavigator_construct_query(graph_nav: GraphNavigator):
+    query = """
+    CONSTRUCT { ?s a <https://schema.org/Organization> } WHERE { ?s a <https://schema.org/Organization> }
+    """
+    g = graph_nav.construct_query(query)
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        RDF.type,
+        URIRef("https://schema.org/Organization"),
+    ) in g
+
+
+def test_graphnavigator_describe_query(graph_nav: GraphNavigator):
+    query = """
+    DESCRIBE <http://example.org/TechCompany>
+    """
+    g = graph_nav.describe_query(query)
+    assert any(triple[0] == URIRef("http://example.org/TechCompany") for triple in g)
+
+
+def test_urinode_ask_query(graph_nav: GraphNavigator):
+    node = graph_nav[URIRef("http://example.org/TechCompany")]
+    query = """
+    ASK WHERE { ?node a <https://schema.org/Organization> }
+    """
+    assert node.ask_query(query) is True
+    query_false = """
+    ASK WHERE { ?node a <https://schema.org/Place> }
+    """
+    assert node.ask_query(query_false) is False
+
+
+def test_urinode_select_query(graph_nav: GraphNavigator):
+    node = graph_nav[URIRef("http://example.org/TechCompany")]
+    query = """
+    SELECT ?p WHERE { ?node ?p ?o }
+    """
+    preds = [row[0] for row in node.select_query(query)]
+    assert URIRef("https://schema.org/location") in preds
+    assert URIRef("https://schema.org/department") in preds
+
+
+def test_urinode_construct_query(graph_nav: GraphNavigator):
+    node = graph_nav[URIRef("http://example.org/TechCompany")]
+    query = """
+    CONSTRUCT { ?node ?p ?o } WHERE { ?node ?p ?o }
+    """
+    g = node.construct_query(query)
+    assert (
+        URIRef("http://example.org/TechCompany"),
+        URIRef("https://schema.org/location"),
+        URIRef("http://example.org/HeadquartersLocation"),
+    ) in g
+
+
+def test_urinode_describe_query(graph_nav: GraphNavigator):
+    node = graph_nav[URIRef("http://example.org/TechCompany")]
+    query = """
+    DESCRIBE ?node
+    """
+    g = node.describe_query(query)
+    assert isinstance(g, Graph)
+
+
+def test_urinode_is_subclass_of(graph_nav: GraphNavigator):
+    node = graph_nav[URIRef("http://example.org/TechCompany")]
+    # Add subclass triple for test
+    graph_nav.graph.add(
+        (
+            node.iri,
+            URIRef("http://www.w3.org/2000/01/rdf-schema#subClassOf"),
+            URIRef("https://schema.org/Organization"),
+        )
+    )
+    assert node.is_subclass_of(URIRef("https://schema.org/Organization")) is True
+    assert node.is_subclass_of(URIRef("https://schema.org/Place")) is False

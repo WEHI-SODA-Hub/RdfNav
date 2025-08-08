@@ -1,27 +1,35 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Self, cast
-from rdflib import RDF, Graph, Node, URIRef, Literal, IdentifiedNode
+from rdflib import RDF, Graph, URIRef, Literal, IdentifiedNode
 from rdflib.graph import _TripleType, _PredicateType, _ObjectType
+from rdflib.query import ResultRow
+
 
 @dataclass
 class GraphNavigator:
     """
     Wraps an RDF graph and provides methods to navigate through it using URIs.
     """
+
     graph: Graph
 
     def __getitem__(self, uri: IdentifiedNode) -> UriNode:
         "Traverses to a given node"
-        return UriNode(self.graph, uri)
+        return UriNode(self, uri)
 
     def subjects(self, predicate: URIRef, object: URIRef) -> Iterable[UriNode]:
         """
         Yields navigator objects for all nodes that are subjects of the given predicate and object
         """
         for subj in self.graph.subjects(predicate, object):
-            yield UriNode(self.graph, subj)
-    
+            if isinstance(subj, IdentifiedNode):
+                yield UriNode(self, subj)
+            else:
+                raise ValueError(
+                    f"{subj} is being used as a subject, but isn't a URI or BNode, which doesn't follow the RDF spec."
+                )
+
     def subject(self, predicate: URIRef, object: URIRef) -> UriNode:
         """
         Yields a single navigator object for the subject of the given predicate and object.
@@ -39,13 +47,62 @@ class GraphNavigator:
         Yields navigator objects for all instances of the given type URI.
         """
         return self.subjects(predicate=RDF.type, object=type_uri)
-    
+
     def instance(self, type_uri: URIRef) -> UriNode:
         """
         Returns a single navigator object for an instance of the given type URI.
         """
         instances = self.instances(type_uri)
         return exactly_one(instances)
+
+    def ask_query(self, query: str, **kwargs: Any) -> bool:
+        """
+        Executes a SPARQL ASK query on the graph.
+        Returns True if the query returns any results, False otherwise.
+
+        This is a type-safe version of the `query` method that expects an ASK query.
+        """
+        result = self.graph.query(query, **kwargs)
+        if not result.type == "ASK":
+            raise ValueError("query must be an ASK query")
+        return bool(result)
+
+    def describe_query(self, query: str, **kwargs: Any) -> Graph:
+        """
+        Executes a SPARQL DESCRIBE query on the graph.
+        Returns a subgraph containing the results of the query.
+
+        This is a type-safe version of the `query` method that expects a DESCRIBE query.
+        """
+        result = self.graph.query(query, **kwargs)
+        if not result.type == "DESCRIBE":
+            raise ValueError("query must be a DESCRIBE query")
+        return cast(Graph, result.graph)
+
+    def select_query(self, query: str, **kwargs: Any) -> Iterable[ResultRow]:
+        """
+        Executes a SPARQL SELECT query on the graph.
+        Returns an iterable of tuples containing the results of the query.
+
+        This is a type-safe version of the `query` method that expects a SELECT query.
+        """
+        result = self.graph.query(query, **kwargs)
+        if not result.type == "SELECT":
+            raise ValueError("query must be a SELECT query")
+        for row in result:
+            yield cast(ResultRow, row)
+
+    def construct_query(self, query: str, **kwargs: Any) -> Graph:
+        """
+        Executes a SPARQL CONSTRUCT query on the graph.
+        Returns a subgraph containing the results of the query.
+
+        This is a type-safe version of the `query` method that expects a CONSTRUCT query.
+        """
+        result = self.graph.query(query, **kwargs)
+        if not result.type == "CONSTRUCT":
+            raise ValueError("query must be a CONSTRUCT query")
+        return cast(Graph, result.graph)
 
 
 def exactly_one[T](items: Iterable[T]) -> T:
@@ -60,14 +117,21 @@ def exactly_one[T](items: Iterable[T]) -> T:
         raise ValueError("Multiple items found")
     return items_list[0]
 
+
 @dataclass
 class UriNode:
     """
     Navigation helper for a single node in the RDF graph, identified by a URI.
     Typically this is created by the `GraphNavigator` class.
     """
-    graph: Graph
-    iri: Node
+
+    navigator: GraphNavigator
+    iri: IdentifiedNode
+
+    @property
+    def graph(self) -> Graph:
+        "Returns the graph that this node belongs to."
+        return self.navigator.graph
 
     @property
     def suffix(self) -> str:
@@ -84,7 +148,7 @@ class UriNode:
         """
         for obj in self.graph.objects(subject=self.iri, predicate=predicate):
             if isinstance(obj, IdentifiedNode):
-                yield UriNode(self.graph, obj)
+                yield UriNode(self.navigator, obj)
 
     def ref_objs(self) -> Iterable[tuple[URIRef, UriNode]]:
         """
@@ -93,7 +157,7 @@ class UriNode:
         """
         for pred, obj in self.graph.predicate_objects(subject=self.iri):
             if isinstance(obj, IdentifiedNode) and isinstance(pred, URIRef):
-                yield pred, UriNode(self.graph, obj)
+                yield pred, UriNode(self.navigator, obj)
 
     def ref_objs_prefix(self, *prefixes: str) -> Iterable[tuple[URIRef, UriNode]]:
         """
@@ -114,7 +178,7 @@ class UriNode:
                 if str(pred).startswith(prefix):
                     yield pred.removeprefix(prefix), obj
                     break
-    
+
     def ref_obj_via(self, predicate: URIRef) -> UriNode:
         """
         Yields one `UriNode` that can be reached from the current object using `predicate`.
@@ -138,7 +202,7 @@ class UriNode:
         for pred, obj in self.graph.predicate_objects(subject=self.iri):
             if isinstance(obj, Literal) and isinstance(pred, URIRef):
                 yield pred, obj.value
-    
+
     def lit_obj_via(self, predicate: URIRef) -> Any:
         """
         Returns one literal that can be reached from the current object using `predicate`.
@@ -177,7 +241,7 @@ class UriNode:
         """
         for subj in self.graph.subjects(predicate=predicate, object=self.iri):
             if isinstance(subj, IdentifiedNode):
-                yield UriNode(self.graph, subj)
+                yield UriNode(self.navigator, subj)
 
     def ref_subjs(self) -> Iterable[UriNode]:
         """
@@ -185,7 +249,7 @@ class UriNode:
         """
         for subj in self.graph.subjects(object=self.iri):
             if isinstance(subj, IdentifiedNode):
-                yield UriNode(self.graph, subj)
+                yield UriNode(self.navigator, subj)
 
     def ref_subj_via(self, predicate: URIRef) -> UriNode:
         """
@@ -199,10 +263,8 @@ class UriNode:
         """
         Returns a subgraph containing only the current node and anything traversable from it.
         """
-        if not isinstance(self.iri, IdentifiedNode):
-            raise ValueError(f"Cannot create subgraph for non-URI node {self.iri}")
-
-        result = self.graph.query("""
+        result = self.graph.query(
+            """
             CONSTRUCT {
                 ?s ?p ?o .
             }
@@ -212,7 +274,9 @@ class UriNode:
                 # Then return all triples whose subject is that node
                 ?s ?p ?o . 
             }
-        """, initBindings={'root': self.iri})
+        """,
+            initBindings={"root": self.iri},
+        )
         if result.graph is None:
             raise ValueError("Subgraph query did not return a Graph")
         return result.graph
@@ -233,7 +297,12 @@ class UriNode:
                 # We want the minimal mutations to the graph, so rather than creating a new one we remove only the triple that contains the old IRI
                 self.graph.remove(triple)
                 # Type is fine, as we're guaranteed to only ever add UriRefs
-                self.graph.add(cast(_TripleType, tuple(new_iri if x == self.iri else x for x in triple)))
+                self.graph.add(
+                    cast(
+                        _TripleType,
+                        tuple(new_iri if x == self.iri else x for x in triple),
+                    )
+                )
 
         return self
 
@@ -262,3 +331,95 @@ class UriNode:
         self.delete(predicate)
         self.add(predicate, obj)
         return self
+
+    def select_query(
+        self, query: str, binding: str = "node", **kwargs: Any
+    ) -> Iterable[ResultRow]:
+        """
+        Executes a SPARQL SELECT query on the graph, with the current node pre-bound into the graph.
+
+        Params:
+            query: The SPARQL query to execute.
+            binding: The variable name to bind the current node to in the query. Defaults to "node".
+        """
+        if "initBindings" in kwargs:
+            kwargs["initBindings"][binding] = self.iri
+        else:
+            kwargs["initBindings"] = {binding: self.iri}
+
+        return self.navigator.select_query(query, **kwargs)
+
+    def describe_query(self, query: str, binding: str = "node", **kwargs: Any) -> Graph:
+        """
+        Executes a SPARQL DESCRIBE query on the graph, with the current node pre-bound into the graph.
+
+        Params:
+            query: The SPARQL query to execute.
+            binding: The variable name to bind the current node to in the query. Defaults to "node".
+        """
+        if "initBindings" in kwargs:
+            kwargs["initBindings"][binding] = self.iri
+        else:
+            kwargs["initBindings"] = {binding: self.iri}
+
+        return self.navigator.describe_query(query, **kwargs)
+
+    def construct_query(
+        self, query: str, binding: str = "node", **kwargs: Any
+    ) -> Graph:
+        """
+        Executes a SPARQL CONSTRUCT query on the graph, with the current node pre-bound into the graph.
+
+        Params:
+            query: The SPARQL query to execute.
+            binding: The variable name to bind the current node to in the query. Defaults to "node".
+        """
+        if "initBindings" in kwargs:
+            kwargs["initBindings"][binding] = self.iri
+        else:
+            kwargs["initBindings"] = {binding: self.iri}
+
+        return self.navigator.construct_query(query, **kwargs)
+
+    def ask_query(self, query: str, binding: str = "node", **kwargs: Any) -> bool:
+        """
+        Executes a SPARQL ASK query on the graph, with the current node pre-bound into the graph.
+
+        Params:
+            query: The SPARQL query to execute.
+            binding: The variable name to bind the current node to in the query. Defaults to "node".
+        """
+        if "initBindings" in kwargs:
+            kwargs["initBindings"][binding] = self.iri
+        else:
+            kwargs["initBindings"] = {binding: self.iri}
+
+        return self.navigator.ask_query(query, **kwargs)
+
+    def is_instance_of(self, type_uri: URIRef) -> bool:
+        """
+        Checks if the current node is a subclass of the given type URI.
+        """
+        return self.ask_query(
+            # Find the type of `node` and then check if it is a subclass of `type_uri`
+            """
+            ASK WHERE {
+                ?node a ?immediate_type .
+                ?immediate_type rdfs:subClassOf* ?type .
+            }
+            """,
+            initBindings={"type": type_uri},
+        )
+
+    def is_subclass_of(self, type_uri: URIRef) -> bool:
+        """
+        Checks if the current node is a subclass of the given type URI.
+        """
+        return self.ask_query(
+            """
+            ASK WHERE {
+                ?node rdfs:subClassOf* ?type .
+            }
+            """,
+            initBindings={"type": type_uri},
+        )
