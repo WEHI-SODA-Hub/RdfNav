@@ -1,7 +1,7 @@
 [project]
 name = "rdfnav"
 version = "0.1.0"
-description = "Add your description here"
+description = " Utilities for navigating an RDF graph in Python"
 readme = "README.md"
 authors = [
     { name = "Michael Milton", email = "michael.r.milton@gmail.com" }
@@ -17,5 +17,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.403",
     "pytest>=8.4.0",
 ]
