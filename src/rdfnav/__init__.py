@@ -17,6 +17,7 @@ class GraphNavigator:
     """
 
     graph: Graph
+    "The RDFLib graph to navigate"
 
     def __getitem__(self, uri: IdentifiedNode) -> UriNode:
         "Traverses to a given node"
@@ -130,7 +131,10 @@ class UriNode:
     """
 
     navigator: GraphNavigator
+    "Navigator for the parent graph"
+
     iri: IdentifiedNode
+    "The current location in the graph, as an RDFLib identifier"
 
     @property
     def graph(self) -> Graph:
@@ -427,3 +431,6 @@ class UriNode:
             """,
             initBindings={"type": type_uri},
         )
+
+
+___all__ = ["GraphNavigator", "UriNode"]
